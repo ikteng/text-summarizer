@@ -1,7 +1,10 @@
 # summarizer.py
 
+import os
 import re
 import spacy
+import subprocess
+import sys
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.text_rank import TextRankSummarizer
@@ -10,8 +13,12 @@ from transformers import pipeline
 import nltk
 nltk.download('punkt_tab')
 
-# Load spaCy English model
-nlp = spacy.load("en_core_web_sm")
+# Load spaCy model (download if missing)
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
 
 summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
 
@@ -35,7 +42,7 @@ def extract_key_sentences_textrank(text, num_sentences=5):
     return " ".join(str(sentence) for sentence in summary)
 
 def abstractive_summarize(text):
-    summary = summarizer(text, max_length=200, min_length=50, do_sample=True)
+    summary = summarizer(text, do_sample=True)
     return summary[0]['summary_text']
 
 def main(long_text):

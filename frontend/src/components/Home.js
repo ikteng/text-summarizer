@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import mammoth from 'mammoth';
 import DeleteIcon from '@mui/icons-material/Delete';
 import './Home.css';
 
@@ -11,16 +12,26 @@ export default function App() {
   const BACKEND_URL = "http://localhost:5000";
 
   // Handle file upload
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+  const handleFile = (file) => {
     if (!file) return;
-
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setInputText(event.target.result);
-    };
-    reader.readAsText(file);
+
+    if (file.name.endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = (event) => setInputText(event.target.result);
+      reader.readAsText(file);
+    } else if (file.name.endsWith('.docx')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const arrayBuffer = event.target.result;
+        mammoth.extractRawText({ arrayBuffer })
+          .then((result) => setInputText(result.value))
+          .catch(() => alert('Failed to read Word document'));
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      alert('Unsupported file type');
+    }
   };
 
   const handleSubmit = async () => {
@@ -67,11 +78,19 @@ export default function App() {
         />
 
         {/* File Upload */}
-        <div className="file-upload-wrapper">
+        <div
+          className="file-upload-wrapper"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+          }}
+        >
           <input
             type="file"
-            accept=".txt"
-            onChange={handleFileUpload}
+            accept=".txt,.docx"
+            onChange={(e) => handleFile(e.target.files[0])}
             className="upload-button"
             id="fileUpload"
           />
@@ -140,7 +159,6 @@ function SummaryRecord({ index, title, original, summary, onDelete }) {
           onClick={() => setExpanded(!expanded)}
           role="button"
           tabIndex={0}
-          onKeyPress={(e) => { if (e.key === 'Enter') setExpanded(!expanded); }}
           aria-expanded={expanded}
         >
           {title}

@@ -14,12 +14,6 @@ source .venv/bin/activate
 echo "Installing dependencies from requirements.txt..."
 pip install -r requirements.txt
 
-# echo "Downloading spaCy English model..."
-# python -m spacy download en_core_web_sm
-
-# echo "Downloading NLTK punkt tokenizer..."
-# python -m nltk.downloader punkt
-
 # echo "Starting Flask app..."
 # python -u app.py &
 
@@ -29,13 +23,12 @@ pip install -r requirements.txt
 
 # wait
 
-echo "Build React frontend..."
+echo "Building React frontend..."
 cd frontend
+npm install
 npm run build
+
 
 echo "Running application..."
 cd ..
 python launcher.py
-
-# pyinstaller --onefile launcher.py
-
