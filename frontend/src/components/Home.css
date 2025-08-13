@@ -1,53 +1,72 @@
-/* Reset box sizing */
-*, *::before, *::after {
+/* ===================== RESET & GLOBAL ===================== */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* Container setup */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f9fbfd;
+  color: #222;
+}
+
+/* ===================== CONTAINERS ===================== */
 .app-container {
   display: flex;
   height: 100vh;
-  padding: 20px;
   gap: 30px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background: #f9fbfd; /* lighter and softer */
-  color: #222;
+  padding: 20px;
   transition: background-color 0.3s ease;
 }
 
-/* Left input side */
-.input-section {
+.input-section,
+.summary-section {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 90vh;
   background: #fff;
-  padding: 22px 24px;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.08);
   transition: box-shadow 0.3s ease;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  height: 90vh;
 }
 
-.input-section h2 {
-  margin-bottom: 16px;
+.summary-section {
+  overflow-y: auto;
+}
+
+.input-section h2,
+.summary-section h2 {
   color: #006bb3;
   font-weight: 700;
   font-size: 1.5rem;
+  margin-bottom: 16px;
 }
 
+.no-summary-text {
+  font-style: italic;
+  color: #707070;
+  font-size: 1rem;
+}
+
+/* ===================== INPUTS ===================== */
 .input-textarea {
   flex: 1;
-  padding: 18px 20px;
+  padding: 20px;
   font-size: 1rem;
-  resize: none;
-  border-radius: 10px;
-  border: 1.8px solid #cdd4db;
-  font-family: inherit;
   line-height: 1.6;
+  resize: none;
+  border-radius: 20px;
+  border: 1.8px solid #cdd4db;
   box-shadow: inset 0 1px 5px rgb(0 0 0 / 0.06);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
   color: #333;
   overflow-y: auto;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  font-family: inherit;
   scrollbar-width: thin;
   scrollbar-color: #a1aec9 #f0f3f7;
 }
@@ -70,6 +89,43 @@
   background-color: #f0f3f7;
 }
 
+.file-upload-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin: 12px 0;
+}
+
+.upload-button {
+  display: none;
+}
+
+.upload-label {
+  padding: 10px 20px;
+  border-radius: 20px;
+  background-color: #f0f3f7;
+  border: 1px solid #cdd4db;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  flex-shrink: 0;
+}
+
+.upload-label:hover {
+  background-color: #e0e7f0;
+  border-color: #0077cc;
+}
+
+.file-name {
+  font-size: 0.9rem;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
 .submit-button {
   margin-top: 18px;
   padding: 14px 28px;
@@ -80,8 +136,8 @@
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: background-color 0.3s ease, filter 0.3s ease;
   box-shadow: 0 4px 12px rgba(0, 119, 204, 0.4);
+  transition: background-color 0.3s ease, filter 0.3s ease;
 }
 
 .submit-button:disabled {
@@ -96,54 +152,33 @@
   filter: brightness(1.05);
 }
 
-/* Right summary side */
-.summary-section {
-  flex: 1;
-  height: 90vh;
-  overflow-y: auto;
-  background: #fff;
-  padding: 24px 26px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.08);
-  transition: box-shadow 0.3s ease;
-}
-
-.summary-section h2 {
-  margin-bottom: 20px;
-  color: #006bb3;
-  font-weight: 700;
-  font-size: 1.5rem;
-}
-
-.no-summary-text {
-  font-style: italic;
-  color: #707070;
-  font-size: 1rem;
-}
-
-/* Summary record container */
+/* ===================== SUMMARY RECORD ===================== */
 .summary-record {
   border: 1.5px solid #c1c9d9;
-  padding: 20px 22px;
-  margin-bottom: 20px;
   border-radius: 12px;
   background-color: #e8eff7;
   box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.05);
+  padding: 20px 22px;
+  margin-bottom: 20px;
   transition: background-color 0.3s ease;
 }
 
-/* Title styling */
+/* Title + Delete Button */
+.summary-title-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
 .summary-title {
   font-weight: 700;
+  font-size: 1rem;
   cursor: pointer;
-  user-select: none;
-  font-size: 1.25rem;
   color: #222;
-  margin-bottom: 14px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  user-select: none;
   transition: color 0.2s ease;
 }
 
@@ -151,25 +186,32 @@
   color: #0077cc;
 }
 
-/* Add arrow with CSS */
 .summary-title::before {
   content: '▶';
   display: inline-block;
   transform-origin: center;
   transition: transform 0.25s ease;
-  color: #222;
   font-size: 1.15rem;
-}
-
-.summary-title:hover::before {
-  color: #0077cc;
+  color: #222;
 }
 
 .summary-title[aria-expanded="true"]::before {
   content: '▼';
-  transform: rotate(0deg);
 }
 
+.delete-button {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.delete-button:hover {
+  color: #990000;
+}
+
+/* ===================== COPY BUTTONS ===================== */
 .header-with-copy {
   display: flex;
   justify-content: space-between;
@@ -179,7 +221,7 @@
 
 .copy-button {
   background-color: #0077cc;
-  color: white;
+  color: #fff;
   border: none;
   border-radius: 6px;
   padding: 4px 12px;
@@ -187,7 +229,6 @@
   font-size: 0.85rem;
   font-weight: 600;
   transition: background-color 0.3s ease;
-  user-select: none;
 }
 
 .copy-button:hover,
@@ -196,7 +237,12 @@
   outline: none;
 }
 
-/* Original text styling */
+/* ===================== TEXT SECTIONS ===================== */
+.original-text,
+.summary-text {
+  margin-bottom: 30px;
+}
+
 .original-text strong,
 .summary-text strong {
   font-weight: 700;
@@ -204,42 +250,22 @@
   font-size: 1rem;
 }
 
-.original-text{
-    margin-bottom: 30px;
+.original-text p,
+.summary-text p {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  color: #1c1c1c;
+  font-size: 0.85rem;
 }
 
 .original-text p {
   max-height: 200px;
   overflow-y: auto;
-  white-space: pre-wrap;
-  line-height: 1.5;
-  color: #1c1c1c;
   scrollbar-width: thin;
   scrollbar-color: #a1aec9 #e7ecf4;
-  font-size: 0.8rem;
 }
 
-/* Show more/less button */
-.toggle-button {
-  margin-top: 8px;
-  background: none;
-  border: none;
-  color: #0077cc;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  font-size: 0.9rem;
-  user-select: none;
-  transition: color 0.3s ease;
-}
-
-.toggle-button:hover,
-.toggle-button:focus {
-  color: #005fa3;
-  outline: none;
-}
-
-/* Webkit scrollbar */
+/* Webkit scrollbar for text */
 .original-text p::-webkit-scrollbar {
   width: 8px;
 }
@@ -251,31 +277,42 @@
   background-color: #e7ecf4;
 }
 
-/* Summary text styling */
 .summary-text {
   background-color: #fff;
   border: 1.5px solid #a5b5d1;
   padding: 16px 18px;
   border-radius: 10px;
-  box-shadow: 0 1px 8px rgba(0,0,0,0.07);
-  color: #333;
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.07);
   font-size: 0.9rem;
   line-height: 1.5;
-  transition: background-color 0.3s ease;
 }
 
-.summary-text p {
+/* ===================== SHOW MORE / TOGGLE BUTTON ===================== */
+.toggle-button {
   margin-top: 8px;
-  white-space: pre-wrap;
+  background: none;
+  border: none;
+  color: #0077cc;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+  user-select: none;
+  transition: color 0.3s ease;
 }
 
-/* Mobile / small screen layout */
+.toggle-button:hover,
+.toggle-button:focus {
+  color: #005fa3;
+  outline: none;
+}
+
+/* ===================== RESPONSIVE ===================== */
 @media (max-width: 768px) {
   .app-container {
     flex-direction: column;
     height: auto;
     padding: 10px;
-    gap: 15px;  
+    gap: 15px;
   }
 
   .input-section,
@@ -284,7 +321,7 @@
     flex: none;
     width: 100%;
     margin-bottom: 20px;
-    padding: 10px;
+    padding: 12px;
   }
 
   .summary-section {

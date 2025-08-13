@@ -20,11 +20,22 @@ pip install -r requirements.txt
 # echo "Downloading NLTK punkt tokenizer..."
 # python -m nltk.downloader punkt
 
-echo "Starting Flask app..."
-python -u app.py &
+# echo "Starting Flask app..."
+# python -u app.py &
 
-echo "Starting React frontend..."
+# echo "Starting React frontend..."
+# cd frontend
+# npm start &
+
+# wait
+
+echo "Build React frontend..."
 cd frontend
-npm start &
+npm run build
 
-wait
+echo "Running application..."
+cd ..
+python launcher.py
+
+# pyinstaller --onefile launcher.py
+
