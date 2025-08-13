@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import mammoth from 'mammoth';
+// import mammoth from 'mammoth';
 import DeleteIcon from '@mui/icons-material/Delete';
 import './Home.css';
 
@@ -11,27 +11,46 @@ export default function App() {
 
   const BACKEND_URL = "http://localhost:5000";
 
-  // Handle file upload
+  // // Handle file upload
+  // const handleFile = (file) => {
+  //   if (!file) return;
+  //   setFileName(file.name);
+
+  //   if (file.name.endsWith('.txt')) {
+  //     const reader = new FileReader();
+  //     reader.onload = (event) => setInputText(event.target.result);
+  //     reader.readAsText(file);
+  //   } else if (file.name.endsWith('.docx')) {
+  //     const reader = new FileReader();
+  //     reader.onload = (event) => {
+  //       const arrayBuffer = event.target.result;
+  //       mammoth.extractRawText({ arrayBuffer })
+  //         .then((result) => setInputText(result.value))
+  //         .catch(() => alert('Failed to read Word document'));
+  //     };
+  //     reader.readAsArrayBuffer(file);
+  //   } else {
+  //     alert('Unsupported file type');
+  //   }
+  // };
+
   const handleFile = (file) => {
     if (!file) return;
     setFileName(file.name);
 
-    if (file.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (event) => setInputText(event.target.result);
-      reader.readAsText(file);
-    } else if (file.name.endsWith('.docx')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const arrayBuffer = event.target.result;
-        mammoth.extractRawText({ arrayBuffer })
-          .then((result) => setInputText(result.value))
-          .catch(() => alert('Failed to read Word document'));
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      alert('Unsupported file type');
-    }
+    const formData = new FormData();
+    formData.append('file', file);
+
+    fetch(`${BACKEND_URL}/api/extract-text`, {
+      method: 'POST',
+      body: formData,
+    })
+    .then(res => res.json())
+    .then(data => setInputText(data.text))
+    .catch(err => {
+      console.error(err);
+      alert('Failed to extract text from file.');
+    });
   };
 
   const handleSubmit = async () => {
@@ -48,9 +67,12 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         const now = new Date();
-        const title = now.toLocaleString();
+        const dateTimeStr = now.toLocaleString();
+        // If there is a fileName, use "filename - date/time", else just date/time
+        const title = fileName ? `${fileName} - ${dateTimeStr}` : dateTimeStr;
         setSummaries(prev => [{ ...data, title }, ...prev]);
         setInputText('');
+        setFileName('');
       } else {
         alert('Failed to summarize');
       }
@@ -89,7 +111,7 @@ export default function App() {
         >
           <input
             type="file"
-            accept=".txt,.docx"
+            accept=".txt,.docx,.pdf"
             onChange={(e) => handleFile(e.target.files[0])}
             className="upload-button"
             id="fileUpload"

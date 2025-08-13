@@ -1,9 +1,11 @@
 pywebview
 pyinstaller
 flask
-flask_cors
+flask-cors
 spacy
 sumy
 transformers
 torch
 nltk
+mammoth
+PyPDF2

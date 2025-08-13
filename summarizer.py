@@ -10,8 +10,6 @@ from sumy.nlp.tokenizers import Tokenizer
 from sumy.summarizers.text_rank import TextRankSummarizer
 from transformers import pipeline
 
-import nltk
-nltk.download('punkt_tab')
 
 # Load spaCy model (download if missing)
 try:
@@ -20,7 +18,8 @@ except OSError:
     subprocess.check_call([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
 
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+summarizer = pipeline("summarization", model="distilbart-cnn-12-6")
+# summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
 def clean_text(text):
     # Remove citation numbers
@@ -45,14 +44,16 @@ def abstractive_summarize(text):
     summary = summarizer(text, do_sample=True)
     return summary[0]['summary_text']
 
-def main(long_text):
+def summarize(long_text):
     cleaned_text = clean_text(long_text)
-    num_sentences = decide_num_sentences(cleaned_text)
-    extracted_text = extract_key_sentences_textrank(cleaned_text, num_sentences)
-    summary = abstractive_summarize(extracted_text)
-
-    fixed_summary = fix_spacing(summary)
-    return fixed_summary
+    if len(cleaned_text.split()) < 200:
+        # short text → transformer directly
+        summary = abstractive_summarize(cleaned_text)
+    else:
+        num_sentences = decide_num_sentences(cleaned_text)
+        extracted_text = extract_key_sentences_textrank(cleaned_text, num_sentences)
+        summary = abstractive_summarize(extracted_text)
+    return fix_spacing(summary)
 
 if __name__ == "__main__":
     long_text = """
@@ -65,5 +66,5 @@ if __name__ == "__main__":
     The Internet has no single centralized governance in either technological implementation or policies for access and usage; each constituent network sets its own policies.[10] The overarching definitions of the two principal name spaces on the Internet, the Internet Protocol address (IP address) space and the Domain Name System (DNS), are directed by a maintainer organization, the Internet Corporation for Assigned Names and Numbers (ICANN). The technical underpinning and standardization of the core protocols is an activity of the Internet Engineering Task Force (IETF), a non-profit organization of loosely affiliated international participants that anyone may associate with by contributing technical expertise.[11] In November 2006, the Internet was included on USA Today's list of the New Seven Wonders.[12]
     """
 
-    result = main(long_text)
+    result = summarize(long_text)
     print("Summary:\n", result)
