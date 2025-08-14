@@ -15,10 +15,10 @@ echo "Installing dependencies from requirements.txt..."
 pip install -r requirements.txt
 
 echo "Starting Flask app..."
-python -u app.py &
+python -u backend/app.py &
 
-echo "Starting React frontend..."
-cd frontend
-npm start &
+echo "Starting React-Native frontend..."
+cd TextSummarizerApp
+npm run web &
 
 wait
