@@ -16,152 +16,157 @@ import * as FileSystem from 'expo-file-system';
 import * as Clipboard from 'expo-clipboard';
 
 interface Summary {
-  id: string;
-  title: string;
-  original_text: string;
-  summary: string;
-  status: 'pending' | 'done' | 'error';
+    id: string;
+    title: string;
+    original_text: string;
+    summary: string;
+    status: 'pending' | 'done' | 'error';
 }
 
 interface SummaryRecordProps {
-  id: string;
-  title: string;
-  original: string;
-  summary: string;
-  status: 'pending' | 'done' | 'error';
-  onDelete: (id: string) => void;
-  onReload: (id: string) => void;
+    id: string;
+    title: string;
+    original: string;
+    summary: string;
+    status: 'pending' | 'done' | 'error';
+    onDelete: (id: string) => void;
+    onReload: (id: string) => void;
 }
 
 export default function App() {
-  const [inputText, setInputText] = useState<string>('');
-  const [fileName, setFileName] = useState<string>('');
-  const [summaries, setSummaries] = useState<Summary[]>([]);
-  const BACKEND_URL = "http://localhost:5000";
+    const [inputText, setInputText] = useState<string>('');
+    const [fileName, setFileName] = useState<string>('');
+    const [summaries, setSummaries] = useState<Summary[]>([]);
+    const BACKEND_URL = "http://localhost:5000";
 
-const handleFile = async () => {
-  try {
-    if (Platform.OS === 'web') {
-      // Web: open file picker using <input>
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.txt,.pdf,.docx';
-      input.onchange = async () => {
-        if (!input.files || input.files.length === 0) return;
-        const file = input.files[0];
-        setFileName(file.name);
+    const handleFile = async () => {
+        try {
+            if (Platform.OS === 'web') {
+            // Web: open file picker using <input>
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.txt,.pdf,.docx';
+            input.onchange = async () => {
+                if (!input.files || input.files.length === 0) return;
+                const file = input.files[0];
+                setFileName(file.name);
 
-        if (file.type === 'text/plain') {
-          const text = await file.text();
-          setInputText(text);
-        } else {
-          const formData = new FormData();
-          formData.append('file', file);
-          const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
-            method: 'POST',
-            body: formData,
-          });
-          if (!res.ok) throw new Error('Failed to extract text');
-          const data = await res.json();
-          setInputText(data.text);
+                if (file.type === 'text/plain') {
+                const text = await file.text();
+                setInputText(text);
+                } else {
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!res.ok) throw new Error('Failed to extract text');
+                const data = await res.json();
+                setInputText(data.text);
+                }
+            };
+            input.click();
+            return;
+            }
+
+            // Mobile (iOS / Android)
+            const result = await DocumentPicker.getDocumentAsync({
+            type: [
+                'text/plain',
+                'application/pdf',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ],
+            });
+            if (result.type !== 'success') return;
+
+            setFileName(result.name);
+
+            if (result.mimeType?.includes('text/plain')) {
+            const content = await FileSystem.readAsStringAsync(result.uri);
+            setInputText(content);
+            } else {
+            const formData = new FormData();
+            formData.append('file', {
+                uri: Platform.OS === 'ios' ? result.uri.replace('file://', '') : result.uri,
+                name: result.name,
+                type: result.mimeType || 'application/octet-stream',
+            } as any);
+
+            const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
+                method: 'POST',
+                body: formData,
+            });
+            if (!res.ok) throw new Error('Failed to extract text');
+            const data = await res.json();
+            setInputText(data.text);
+            }
+        } catch (err) {
+            console.error(err);
+            Alert.alert('Error', 'Failed to extract text from file.');
         }
-      };
-      input.click();
-      return;
-    }
-
-    // Mobile (iOS / Android)
-    const result = await DocumentPicker.getDocumentAsync({
-      type: [
-        'text/plain',
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      ],
-    });
-    if (result.type !== 'success') return;
-
-    setFileName(result.name);
-
-    if (result.mimeType?.includes('text/plain')) {
-      const content = await FileSystem.readAsStringAsync(result.uri);
-      setInputText(content);
-    } else {
-      const formData = new FormData();
-      formData.append('file', {
-        uri: Platform.OS === 'ios' ? result.uri.replace('file://', '') : result.uri,
-        name: result.name,
-        type: result.mimeType || 'application/octet-stream',
-      } as any);
-
-      const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Failed to extract text');
-      const data = await res.json();
-      setInputText(data.text);
-    }
-  } catch (err) {
-    console.error(err);
-    Alert.alert('Error', 'Failed to extract text from file.');
-  }
-};
+    };
 
 
-  const summarizeText = async (id: string, text: string) => {
-    setSummaries(prev =>
-      prev.map(s => s.id === id ? { ...s, status: 'pending', summary: '' } : s)
-    );
+    const summarizeText = async (id: string, text: string) => {
+        setSummaries(prev =>
+        prev.map(s => s.id === id ? { ...s, status: 'pending', summary: '' } : s)
+        );
 
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/summarize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
+        try {
+        const res = await fetch(`${BACKEND_URL}/api/summarize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        });
 
-      if (!res.ok) throw new Error('Summarization failed');
+        if (!res.ok) throw new Error('Summarization failed');
 
-      const data = await res.json();
-      setSummaries(prev =>
-        prev.map(s => s.id === id ? { ...s, summary: data.summary, status: 'done' } : s)
-      );
-    } catch (err) {
-      console.error(err);
-      setSummaries(prev =>
-        prev.map(s => s.id === id ? { ...s, status: 'error' } : s)
-      );
-    }
-  };
+        const data = await res.json();
+        setSummaries(prev =>
+            prev.map(s => s.id === id ? { ...s, summary: data.summary, status: 'done' } : s)
+        );
+        } catch (err) {
+        console.error(err);
+        setSummaries(prev =>
+            prev.map(s => s.id === id ? { ...s, status: 'error' } : s)
+        );
+        }
+    };
 
-  const handleSubmit = () => {
-    if (!inputText.trim()) return;
+    const handleSubmit = () => {
+        if (!inputText.trim()) return;
 
-    const id = Date.now().toString();
-    const now = new Date();
-    const title = fileName ? `${fileName} - ${now.toLocaleString()}` : now.toLocaleString();
+        const id = Date.now().toString();
+        const now = new Date();
+        const title = fileName ? `${fileName} - ${now.toLocaleString()}` : now.toLocaleString();
 
-    setSummaries(prev => [
-      { id, title, original_text: inputText, summary: '', status: 'pending' },
-      ...prev
-    ]);
+        setSummaries(prev => [
+        { id, title, original_text: inputText, summary: '', status: 'pending' },
+        ...prev
+        ]);
 
-    const textToSummarize = inputText;
-    setInputText('');
-    setFileName('');
+        const textToSummarize = inputText;
+        setInputText('');
+        setFileName('');
 
-    summarizeText(id, textToSummarize);
-  };
+        summarizeText(id, textToSummarize);
+    };
 
-  const handleReload = (id: string) => {
-    const record = summaries.find(s => s.id === id);
-    if (!record) return;
-    summarizeText(id, record.original_text);
-  };
+    const handleReload = (id: string) => {
+        const record = summaries.find(s => s.id === id);
+        if (!record) return;
+        summarizeText(id, record.original_text);
+    };
 
-  const handleDelete = (id: string) => {
-    setSummaries(prev => prev.filter(s => s.id !== id));
-  };
+    const handleDelete = (id: string) => {
+        setSummaries(prev => prev.filter(s => s.id !== id));
+    };
+
+    const handleClear = () => {
+        setInputText('');
+        setFileName('');
+    };
 
   return (
     <View style={styles.appContainer}>
@@ -177,16 +182,29 @@ const handleFile = async () => {
             numberOfLines={10}
           />
 
-          {/* File Upload */}
+        {/* File Upload */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 8 }}>
+        {/* Left side: Choose file button + file name */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, flex: 1 }}>
             <TouchableOpacity style={styles.uploadButton} onPress={handleFile}>
-                <Text style={styles.uploadButtonText}>Choose file</Text>
+            <Text style={styles.uploadButtonText}>Choose file</Text>
             </TouchableOpacity>
+            <Text style={{ flexShrink: 1, fontSize: 14, color: '#555' }}>
+            {fileName || 'No file chosen'}
+            </Text>
+        </View>
 
-          <Text style={styles.fileName}>{fileName || 'No file chosen'}</Text>
+        {/* Right side: Clear button */}
+        <TouchableOpacity style={[styles.uploadButton, { backgroundColor: '#ffdddd' }]} onPress={handleClear}>
+            <Text style={[styles.uploadButtonText, { color: '#cc0000' }]}>Clear</Text>
+        </TouchableOpacity>
+        </View>
 
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>Summarize</Text>
-          </TouchableOpacity>
+        {/* Summarize Button */}
+        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+        <Text style={styles.submitButtonText}>Summarize</Text>
+        </TouchableOpacity>
+
         </View>
 
         <View style={styles.summarySection}>

@@ -12,10 +12,6 @@ import summarizer
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-
 @app.route('/api/extract-text', methods=['POST'])
 def extract_text():
     print("Extracting text...")
