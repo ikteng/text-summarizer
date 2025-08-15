@@ -1,11 +1,11 @@
-import os
-import re
-import time
+# app.py
+
 from io import BytesIO
-from flask import Flask, request, jsonify, Response, stream_with_context
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import fitz
+from urllib.parse import unquote
 import mammoth
 import summarizer
 

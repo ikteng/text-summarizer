@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Client } from "@gradio/client";
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   StyleSheet,
   Alert,
   Platform,
-  Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -37,136 +37,106 @@ export default function App() {
     const [inputText, setInputText] = useState<string>('');
     const [fileName, setFileName] = useState<string>('');
     const [summaries, setSummaries] = useState<Summary[]>([]);
-    const BACKEND_URL = "http://localhost:5000";
 
     const handleFile = async () => {
-        try {
-            if (Platform.OS === 'web') {
-            // Web: open file picker using <input>
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.txt,.pdf,.docx';
-            input.onchange = async () => {
-                if (!input.files || input.files.length === 0) return;
-                const file = input.files[0];
-                setFileName(file.name);
+      try {
+        if (Platform.OS === 'web') {
+          // Web: open file picker using <input>
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.txt'; // only allow .txt
+          input.onchange = async () => {
+            if (!input.files || input.files.length === 0) return;
+            const file = input.files[0];
+            setFileName(file.name);
 
-                if (file.type === 'text/plain') {
-                const text = await file.text();
-                setInputText(text);
-                } else {
-                const formData = new FormData();
-                formData.append('file', file);
-                const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
-                    method: 'POST',
-                    body: formData,
-                });
-                if (!res.ok) throw new Error('Failed to extract text');
-                const data = await res.json();
-                setInputText(data.text);
-                }
-            };
-            input.click();
-            return;
-            }
-
-            // Mobile (iOS / Android)
-            const result = await DocumentPicker.getDocumentAsync({
-            type: [
-                'text/plain',
-                'application/pdf',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            ],
-            });
-            if (result.type !== 'success') return;
-
-            setFileName(result.name);
-
-            if (result.mimeType?.includes('text/plain')) {
-            const content = await FileSystem.readAsStringAsync(result.uri);
-            setInputText(content);
+            if (file.type === 'text/plain') {
+              const text = await file.text();
+              setInputText(text);
             } else {
-            const formData = new FormData();
-            formData.append('file', {
-                uri: Platform.OS === 'ios' ? result.uri.replace('file://', '') : result.uri,
-                name: result.name,
-                type: result.mimeType || 'application/octet-stream',
-            } as any);
-
-            const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
-                method: 'POST',
-                body: formData,
-            });
-            if (!res.ok) throw new Error('Failed to extract text');
-            const data = await res.json();
-            setInputText(data.text);
+              Alert.alert('Invalid file', 'Only .txt files are allowed.');
             }
-        } catch (err) {
-            console.error(err);
-            Alert.alert('Error', 'Failed to extract text from file.');
+          };
+          input.click();
+          return;
         }
-    };
 
-
-    const summarizeText = async (id: string, text: string) => {
-        setSummaries(prev =>
-        prev.map(s => s.id === id ? { ...s, status: 'pending', summary: '' } : s)
-        );
-
-        try {
-        const res = await fetch(`${BACKEND_URL}/api/summarize`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
+        // Mobile (iOS / Android)
+        const result = await DocumentPicker.getDocumentAsync({
+          type: 'text/plain', // only .txt
         });
+        if (result.type !== 'success') return;
 
-        if (!res.ok) throw new Error('Summarization failed');
+        setFileName(result.name);
 
-        const data = await res.json();
-        setSummaries(prev =>
-            prev.map(s => s.id === id ? { ...s, summary: data.summary, status: 'done' } : s)
-        );
-        } catch (err) {
+        const content = await FileSystem.readAsStringAsync(result.uri);
+        setInputText(content);
+
+      } catch (err) {
         console.error(err);
-        setSummaries(prev =>
-            prev.map(s => s.id === id ? { ...s, status: 'error' } : s)
-        );
-        }
+        Alert.alert('Error', 'Failed to extract text from file.');
+      }
     };
 
-    const handleSubmit = () => {
-        if (!inputText.trim()) return;
+  const summarizeText = async (id: string, text: string) => {
+    setSummaries(prev =>
+      prev.map(s => s.id === id ? { ...s, status: 'pending', summary: '' } : s)
+    );
 
-        const id = Date.now().toString();
-        const now = new Date();
-        const title = fileName ? `${fileName} - ${now.toLocaleString()}` : now.toLocaleString();
+    try {
+      // Connect to Gradio Space
+      const client = await Client.connect("ikteng/text-summarizer");
 
-        setSummaries(prev => [
-        { id, title, original_text: inputText, summary: '', status: 'pending' },
-        ...prev
-        ]);
+      // Call the summarize_text function
+      const result = await client.predict("/summarize_text", { text: text });
 
-        const textToSummarize = inputText;
-        setInputText('');
-        setFileName('');
+      // result.data[0] contains the summary
+      const summary = result.data as string;
 
-        summarizeText(id, textToSummarize);
-    };
+      setSummaries(prev =>
+        prev.map(s => s.id === id ? { ...s, summary, status: 'done' } : s)
+      );
+    } catch (err) {
+      console.error(err);
+      setSummaries(prev =>
+        prev.map(s => s.id === id ? { ...s, status: 'error' } : s)
+      );
+    }
+  };
 
-    const handleReload = (id: string) => {
-        const record = summaries.find(s => s.id === id);
-        if (!record) return;
-        summarizeText(id, record.original_text);
-    };
+  const handleSubmit = () => {
+      if (!inputText.trim()) return;
 
-    const handleDelete = (id: string) => {
-        setSummaries(prev => prev.filter(s => s.id !== id));
-    };
+      const id = Date.now().toString();
+      const now = new Date();
+      const title = fileName ? `${fileName} - ${now.toLocaleString()}` : now.toLocaleString();
 
-    const handleClear = () => {
-        setInputText('');
-        setFileName('');
-    };
+      setSummaries(prev => [
+      { id, title, original_text: inputText, summary: '', status: 'pending' },
+      ...prev
+      ]);
+
+      const textToSummarize = inputText;
+      setInputText('');
+      setFileName('');
+
+      summarizeText(id, textToSummarize);
+  };
+
+  const handleReload = (id: string) => {
+      const record = summaries.find(s => s.id === id);
+      if (!record) return;
+      summarizeText(id, record.original_text);
+  };
+
+  const handleDelete = (id: string) => {
+      setSummaries(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleClear = () => {
+      setInputText('');
+      setFileName('');
+  };
 
   return (
     <View style={styles.appContainer}>
