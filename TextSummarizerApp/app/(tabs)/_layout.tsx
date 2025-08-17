@@ -13,6 +13,7 @@ export default function RootLayout() {
           ),
         }}
       />
+
       <Tabs.Screen
         name="text-summarizer"
         options={{

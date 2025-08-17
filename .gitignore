@@ -2,5 +2,5 @@
 /uploads
 /__pycache__
 /backend/__pycache__
-/text-summarizer
+/backend/text-summarizer
 backend/backend.txt
