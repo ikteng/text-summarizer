@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Client, handle_file } from "@gradio/client";
 import {
   View,
   Text,
@@ -47,17 +46,7 @@ export default function App() {
   const [status, setStatus] = useState<string>('');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
 
-  // Convert ArrayBuffer to base64
-  const base64Encode = (arrayBuffer: ArrayBuffer): string => {
-    let binary = '';
-    const bytes = new Uint8Array(arrayBuffer);
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode(...chunk);
-    }
-    return globalThis.btoa(binary);
-  };
+  const BACKEND_URL = "https://ikteng-text-summarizer-docker.hf.space";
 
   // Web download helper
   const downloadTextFile = (filename: string, content: string) => {
@@ -86,23 +75,24 @@ export default function App() {
     }
   };
 
-  const handleFile = async () => {
+      const handleFile = async () => {
     try {
       setIsExtracting(true);
       setStatus("Picking file...");
 
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.txt, .docx, .pdf';
-        input.onchange = async (e) => {
-          const files = (e.target as HTMLInputElement).files;
-          if (!files || files.length === 0) return;
-          const file = files[0];
+      if (Platform.OS === "web") {
+        // Web: open file picker
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".txt,.pdf,.docx";
+
+        input.onchange = async () => {
+          if (!input.files || input.files.length === 0) return;
+          const file = input.files[0];
           setFileName(file.name);
           setStatus(`File selected: ${file.name}`);
 
-          if (file.type === 'text/plain') {
+          if (file.type === "text/plain") {
             const text = await file.text();
             setInputText(text);
             setStatus("Text loaded from .txt file");
@@ -110,27 +100,18 @@ export default function App() {
             return;
           }
 
-          setStatus("Processing file...");
-          const tempFile = await handle_file(file);
+          setStatus("Uploading file for extraction...");
+          const formData = new FormData();
+          formData.append("file", file);
 
-          let arrayBuffer: ArrayBuffer;
-          if ("arrayBuffer" in tempFile) {
-            arrayBuffer = await tempFile.arrayBuffer();
-          } else if ("data" in tempFile) {
-            arrayBuffer = tempFile.data;
-          } else {
-            throw new Error("Unknown file type returned by handle_file");
-          }
+          const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
+            method: "POST",
+            body: formData,
+          });
+          if (!res.ok) throw new Error("Failed to extract text");
 
-          const base64Data = base64Encode(arrayBuffer);
-          const fileData = { name: file.name, data: base64Data };
-
-          setStatus("Connecting to server...");
-          const client = await Client.connect("ikteng/text-summarizer");
-          setStatus("Uploading file...");
-          const result = await client.predict("/predict_1", { file: fileData });
-
-          setInputText(result.data as string);
+          const data = await res.json();
+          setInputText(data.text);
           setStatus("Text extraction complete");
           setIsExtracting(false);
         };
@@ -138,41 +119,62 @@ export default function App() {
         return;
       }
 
-      // Mobile
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          'text/plain', 
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        ]
-      });
+            // Mobile
+      try {
+        console.log("Opening document picker...");
 
-      if (result.type !== 'success') return;
-      setFileName(result.name);
-      setStatus("Reading file...");
+        const result = await DocumentPicker.getDocumentAsync({
+          type: [
+            "text/plain",
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ],
+        });
 
-      if (result.name.endsWith(".txt")) {
-        const text = await FileSystem.readAsStringAsync(result.uri);
-        setInputText(text);
-        setStatus("Text loaded from .txt file");
+        console.log("File picker result:", result);
+
+        if (result.canceled) return;
+
+        const file = result.assets[0]; // access first selected file
+        setFileName(file.name);
+
+        setStatus("Uploading file for extraction...");
+        console.log("Uploading file to backend...");
+
+        const formData = new FormData();
+        formData.append("file", {
+          uri: file.uri,
+          name: file.name,
+          type: file.mimeType || "application/octet-stream",
+        });
+
+        const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
+          method: "POST",
+          body: formData,
+          // Do NOT set Content-Type manually! fetch will handle it
+        });
+
+        console.log("Server response status:", res.status);
+
+        if (!res.ok) throw new Error("Failed to extract text");
+
+        const data = await res.json();
+        // console.log("Data received from backend:", data);
+        console.log("Extracted Text!")
+
+        setInputText(data.text);
+        setStatus("Text extraction complete");
         setIsExtracting(false);
-        return;
+      } catch (err) {
+        console.error("Error during file upload:", err);
+        setStatus("Error uploading file");
+        setIsExtracting(false);
       }
-
-      setStatus("Processing file...");
-      const fileBytes = await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
-      const fileData = { name: result.name, data: fileBytes };
-      const client = await Client.connect("ikteng/text-summarizer");
-      setStatus("Uploading file...");
-      const response = await client.predict("/predict_1", { file: fileData });
-
-      setInputText(response.data as string);
-      setStatus("Text extraction complete");
-      setIsExtracting(false);
 
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Failed to extract text from file.");
-      setStatus("Error picking file");
+      setStatus("Error extracting text");
       setIsExtracting(false);
     }
   };
@@ -183,21 +185,41 @@ export default function App() {
     );
 
     try {
-      const client = await Client.connect("ikteng/text-summarizer");
-      const result = await client.predict("/predict", { text });
+      setStatus("Summarizing text...");
 
-      setSummaries(prev =>
-        prev.map(s =>
-          s.id === id
-            ? { ...s, summary: result.data as string, status: "done" }
-            : s
+      const res = await fetch(`${BACKEND_URL}/api/summarize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok) throw new Error("Summarization failed");
+
+      const data = await res.json();
+
+      // normalize summary (in case backend returns list/dict)
+      let summary: string;
+      if (Array.isArray(data.summary)) {
+        summary = data.summary.join(" ");
+      } else if (typeof data.summary === "object") {
+        summary = JSON.stringify(data.summary);
+      } else {
+        summary = data.summary ?? "";
+      }
+
+      // update that specific summary card
+      setSummaries((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, summary, status: "done" } : s
         )
       );
     } catch (err) {
       console.error(err);
-      setSummaries(prev =>
-        prev.map(s => (s.id === id ? { ...s, status: "error" } : s))
-      );
+       setSummaries((prev) =>
+        prev.map((s) =>
+          s.id === id ? { ...s, status: "error" } : s
+        )
+       );
     }
   };
 
@@ -233,6 +255,7 @@ export default function App() {
   const handleClear = () => {
     setInputText('');
     setFileName('');
+    setIsExtracting(false);
   };
 
   return (
@@ -396,23 +419,113 @@ function SummaryRecord({
 
 const styles = StyleSheet.create({
   appContainer: { flex: 1 },
-  scrollContainer: { padding: 20 },
-  inputSection: { width: '100%', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 5, padding: 24, marginBottom: 20 },
-  summarySection: { width: '100%', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 5, padding: 24 },
-  sectionTitle: { fontWeight: '700', fontSize: 20, marginBottom: 20, borderBottomWidth: 2, paddingBottom: 6 },
-  noSummaryText: { fontStyle: 'italic', fontSize: 16 },
-  inputTextarea: { minHeight: 150, padding: 20, fontSize: 16, lineHeight: 24, textAlignVertical: 'top', borderRadius: 12, borderWidth: 1.5 },
-  uploadButton: { padding: 10, borderRadius: 12, borderWidth: 1, alignSelf: 'flex-start' },
-  uploadButtonText: { fontSize: 16, fontWeight: '600' },
-  submitButton: { marginTop: 18, padding: 16, borderRadius: 12, alignItems: 'center' },
-  submitButtonText: { fontSize: 18, fontWeight: '700', color: '#fff' },
-  summaryRecord: { borderWidth: 1.5, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, padding: 20, marginBottom: 22 },
-  summaryTitleWrapper: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  summaryTitle: { fontWeight: '700', fontSize: 16 },
-  textSection: { borderWidth: 1.5, marginBottom: 28, padding: 18, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 1 },
-  headerWithCopy: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  sectionHeader: { fontWeight: '700', fontSize: 16 },
-  copyButton: { borderRadius: 8, padding: 5, paddingHorizontal: 14 },
-  copyButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  textContent: { maxHeight: 220 },
+  scrollContainer: { padding: 16 },
+
+  // Sections
+  inputSection: { 
+    width: '100%', 
+    padding: 16, 
+    borderRadius: 12, 
+    marginBottom: 16 
+  },
+  summarySection: { 
+    width: '100%', 
+    padding: 16, 
+    borderRadius: 12 
+  },
+
+  // Text
+  sectionTitle: { 
+    fontWeight: '600', 
+    fontSize: 18, 
+    marginBottom: 12 
+  },
+  noSummaryText: { 
+    fontStyle: 'italic', 
+    fontSize: 14 
+  },
+
+  // Input
+  inputTextarea: { 
+    minHeight: 120, 
+    padding: 12, 
+    fontSize: 15, 
+    lineHeight: 22, 
+    textAlignVertical: 'top', 
+    borderRadius: 8, 
+    borderWidth: 1, 
+    marginBottom: 12 
+  },
+
+  // Buttons
+  uploadButton: { 
+    paddingVertical: 8, 
+    paddingHorizontal: 14, 
+    borderRadius: 8, 
+    borderWidth: 1 
+  },
+  uploadButtonText: { 
+    fontSize: 15, 
+    fontWeight: '500' 
+  },
+  submitButton: { 
+    marginTop: 12, 
+    padding: 14, 
+    borderRadius: 8, 
+    alignItems: 'center' 
+  },
+  submitButtonText: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#fff' 
+  },
+
+  // Summary cards
+  summaryRecord: { 
+    borderWidth: 1, 
+    borderRadius: 10, 
+    padding: 14, 
+    marginBottom: 16 
+  },
+  summaryTitleWrapper: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 8 
+  },
+  summaryTitle: { 
+    fontWeight: '600', 
+    fontSize: 15 
+  },
+
+  // Text blocks
+  textSection: { 
+    borderWidth: 1, 
+    marginBottom: 16, 
+    padding: 12, 
+    borderRadius: 8 
+  },
+  headerWithCopy: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 6 
+  },
+  sectionHeader: { 
+    fontWeight: '600', 
+    fontSize: 15 
+  },
+  copyButton: { 
+    borderRadius: 6, 
+    paddingVertical: 4, 
+    paddingHorizontal: 10 
+  },
+  copyButtonText: { 
+    color: '#fff', 
+    fontSize: 13, 
+    fontWeight: '500' 
+  },
+  textContent: { 
+    maxHeight: 200 
+  },
 });
