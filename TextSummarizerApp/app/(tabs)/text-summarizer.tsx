@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { Client, handle_file } from "@gradio/client";
 import {
   View,
   Text,
@@ -8,8 +9,6 @@ import {
   StyleSheet,
   Alert,
   Platform,
-  Dimensions,
-  useWindowDimensions,
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { useColorScheme } from '../hooks/useColorScheme';
@@ -38,9 +37,6 @@ interface SummaryRecordProps {
   colors: typeof Colors.light | typeof Colors.dark;
 }
 
-const { width, height } = Dimensions.get('window');
-const isSmallDevice = width < 360;
-
 export default function App() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'dark'];
@@ -50,7 +46,18 @@ export default function App() {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [status, setStatus] = useState<string>('');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
-  const BACKEND_URL = "https://ikteng-text-summarizer-docker.hf.space"
+
+  // Convert ArrayBuffer to base64
+  const base64Encode = (arrayBuffer: ArrayBuffer): string => {
+    let binary = '';
+    const bytes = new Uint8Array(arrayBuffer);
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return globalThis.btoa(binary);
+  };
 
   // Web download helper
   const downloadTextFile = (filename: string, content: string) => {
@@ -84,19 +91,18 @@ export default function App() {
       setIsExtracting(true);
       setStatus("Picking file...");
 
-      if (Platform.OS === "web") {
-        // Web: open file picker
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = ".txt,.pdf,.docx";
-
-        input.onchange = async () => {
-          if (!input.files || input.files.length === 0) return;
-          const file = input.files[0];
+      if (Platform.OS === 'web') {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.txt, .docx, .pdf';
+        input.onchange = async (e) => {
+          const files = (e.target as HTMLInputElement).files;
+          if (!files || files.length === 0) return;
+          const file = files[0];
           setFileName(file.name);
           setStatus(`File selected: ${file.name}`);
 
-          if (file.type === "text/plain") {
+          if (file.type === 'text/plain') {
             const text = await file.text();
             setInputText(text);
             setStatus("Text loaded from .txt file");
@@ -104,18 +110,27 @@ export default function App() {
             return;
           }
 
-          setStatus("Uploading file for extraction...");
-          const formData = new FormData();
-          formData.append("file", file);
+          setStatus("Processing file...");
+          const tempFile = await handle_file(file);
 
-          const res = await fetch(`${BACKEND_URL}/api/extract-text`, {
-            method: "POST",
-            body: formData,
-          });
-          if (!res.ok) throw new Error("Failed to extract text");
+          let arrayBuffer: ArrayBuffer;
+          if ("arrayBuffer" in tempFile) {
+            arrayBuffer = await tempFile.arrayBuffer();
+          } else if ("data" in tempFile) {
+            arrayBuffer = tempFile.data;
+          } else {
+            throw new Error("Unknown file type returned by handle_file");
+          }
 
-          const data = await res.json();
-          setInputText(data.text);
+          const base64Data = base64Encode(arrayBuffer);
+          const fileData = { name: file.name, data: base64Data };
+
+          setStatus("Connecting to server...");
+          const client = await Client.connect("ikteng/text-summarizer");
+          setStatus("Uploading file...");
+          const result = await client.predict("/predict_1", { file: fileData });
+
+          setInputText(result.data as string);
           setStatus("Text extraction complete");
           setIsExtracting(false);
         };
@@ -123,91 +138,66 @@ export default function App() {
         return;
       }
 
-      // --- Mobile ---
+      // Mobile
       const result = await DocumentPicker.getDocumentAsync({
         type: [
-          "text/plain",
-          "application/pdf",
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ],
+          'text/plain', 
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ]
       });
 
-      if (result.type !== "success") return;
+      if (result.type !== 'success') return;
       setFileName(result.name);
+      setStatus("Reading file...");
 
-      // --- Upload to backend ---
-      setStatus("Uploading file for extraction...");
-      const formData = new FormData();
-      formData.append("file", {
-        uri: Platform.OS === "ios" ? result.uri.replace("file://", "") : result.uri,
-        name: result.name,
-        type: result.mimeType || "application/octet-stream",
-      } as any);
+      if (result.name.endsWith(".txt")) {
+        const text = await FileSystem.readAsStringAsync(result.uri);
+        setInputText(text);
+        setStatus("Text loaded from .txt file");
+        setIsExtracting(false);
+        return;
+      }
 
-      const res = await fetch(`${BACKEND_URL}/api/extract-text`, { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Failed to extract text");
+      setStatus("Processing file...");
+      const fileBytes = await FileSystem.readAsStringAsync(result.uri, { encoding: FileSystem.EncodingType.Base64 });
+      const fileData = { name: result.name, data: fileBytes };
+      const client = await Client.connect("ikteng/text-summarizer");
+      setStatus("Uploading file...");
+      const response = await client.predict("/predict_1", { file: fileData });
 
-      const data = await res.json();
-      setInputText(data.text);
+      setInputText(response.data as string);
       setStatus("Text extraction complete");
       setIsExtracting(false);
 
     } catch (err) {
       console.error(err);
       Alert.alert("Error", "Failed to extract text from file.");
-      setStatus("Error extracting text");
+      setStatus("Error picking file");
       setIsExtracting(false);
     }
   };
 
   const summarizeText = async (id: string, text: string) => {
-    // mark the specific summary card as pending
-    setSummaries((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, status: "pending", summary: "" } : s
-      )
+    setSummaries(prev =>
+      prev.map(s => (s.id === id ? { ...s, status: "pending", summary: "" } : s))
     );
 
     try {
-      setStatus("Summarizing text...");
+      const client = await Client.connect("ikteng/text-summarizer");
+      const result = await client.predict("/predict", { text });
 
-      const res = await fetch(`${BACKEND_URL}/api/summarize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!res.ok) throw new Error("Summarization failed");
-
-      const data = await res.json();
-
-      // normalize summary (in case backend returns list/dict)
-      let summary: string;
-      if (Array.isArray(data.summary)) {
-        summary = data.summary.join(" ");
-      } else if (typeof data.summary === "object") {
-        summary = JSON.stringify(data.summary);
-      } else {
-        summary = data.summary ?? "";
-      }
-
-      // update that specific summary card
-      setSummaries((prev) =>
-        prev.map((s) =>
-          s.id === id ? { ...s, summary, status: "done" } : s
+      setSummaries(prev =>
+        prev.map(s =>
+          s.id === id
+            ? { ...s, summary: result.data as string, status: "done" }
+            : s
         )
       );
-
-      setStatus(""); // clear global status after success
     } catch (err) {
       console.error(err);
-
-      setSummaries((prev) =>
-        prev.map((s) =>
-          s.id === id ? { ...s, status: "error" } : s
-        )
+      setSummaries(prev =>
+        prev.map(s => (s.id === id ? { ...s, status: "error" } : s))
       );
-      setStatus("Error during summarization");
     }
   };
 
@@ -243,86 +233,55 @@ export default function App() {
   const handleClear = () => {
     setInputText('');
     setFileName('');
-    setIsExtracting(false);
   };
 
-return (
+  return (
     <View style={[styles.appContainer, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Input Section */}
         <View style={[styles.inputSection, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.tint, borderBottomColor: colors.border }]}>
-            Paste Text to Summarize
-          </Text>
-
+          <Text style={[styles.sectionTitle, { color: colors.tint, borderBottomColor: colors.border }]}>Paste Text to Summarize</Text>
           <TextInput
-            style={[
-              styles.inputTextarea,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.card,
-                color: colors.text,
-                fontSize: isSmallDevice ? 14 : 16,
-                minHeight: height * 0.15,
-              },
-            ]}
+            style={[styles.inputTextarea, { borderColor: colors.border, backgroundColor: colors.card, color: colors.text }]}
             value={inputText}
             onChangeText={setInputText}
             placeholder="Paste or type text here..."
             placeholderTextColor={colors.icon}
             multiline
+            numberOfLines={10}
           />
 
           {/* File Upload */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginVertical: 8,
-              flexWrap: 'wrap',
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1 }}>
-              <TouchableOpacity
-                style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border, marginRight: 10 }]}
-                onPress={handleFile}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20, flex: 1 }}>
+              <TouchableOpacity 
+                style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]} 
+                onPress={handleFile} 
                 disabled={isExtracting}
               >
                 <Text style={[styles.uploadButtonText, { color: colors.text }]}>
                   {isExtracting ? "Extracting..." : "Choose file"}
                 </Text>
               </TouchableOpacity>
-              <Text style={{ flexShrink: 1, fontSize: isSmallDevice ? 12 : 14, color: colors.icon }}>
+              <Text style={{ flexShrink: 1, fontSize: 14, color: colors.icon }}>
                 {fileName || 'No file chosen'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border, marginTop: isSmallDevice ? 6 : 0 }]}
-              onPress={handleClear}
-            >
+            <TouchableOpacity style={[styles.uploadButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={handleClear}>
               <Text style={[styles.uploadButtonText, { color: colors.text }]}>Clear</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[styles.submitButton, { backgroundColor: colors.tint, marginTop: isSmallDevice ? 10 : 18 }]}
-            onPress={handleSubmit}
-          >
-            <Text style={[styles.submitButtonText, { fontSize: isSmallDevice ? 16 : 18 }]}>Summarize</Text>
+          <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.tint }]} onPress={handleSubmit}>
+            <Text style={styles.submitButtonText}>Summarize</Text>
           </TouchableOpacity>
         </View>
 
         {/* Summaries Section */}
         <View style={[styles.summarySection, { backgroundColor: colors.card }]}>
-          <Text style={[styles.sectionTitle, { color: colors.tint, borderBottomColor: colors.border }]}>
-            Summaries
-          </Text>
-
+          <Text style={[styles.sectionTitle, { color: colors.tint, borderBottomColor: colors.border }]}>Summaries</Text>
           {summaries.length === 0 ? (
-            <Text style={[styles.noSummaryText, { color: colors.icon, fontSize: isSmallDevice ? 14 : 16 }]}>
-              No summaries yet.
-            </Text>
+            <Text style={[styles.noSummaryText, { color: colors.icon }]}>No summaries yet.</Text>
           ) : (
             summaries.map(s => (
               <SummaryRecord
@@ -361,7 +320,7 @@ function SummaryRecord({
   downloadTextFile
 }: SummaryRecordExtendedProps) {
   const [expanded, setExpanded] = useState<boolean>(false);
-  
+
   const copyToClipboard = async (text: string) => {
     await Clipboard.setStringAsync(text);
     Alert.alert('Copied to clipboard!');
@@ -369,53 +328,44 @@ function SummaryRecord({
 
   return (
     <View style={[styles.summaryRecord, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {/* Header */}
       <View style={styles.summaryTitleWrapper}>
-        <TouchableOpacity onPress={() => setExpanded(!expanded)} style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Text style={{ color: colors.text, marginRight: 10 }}>{expanded ? '▼' : '▶'}</Text>
+        <TouchableOpacity onPress={() => setExpanded(!expanded)}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ color: colors.text, marginRight: 20 }}>
+              {expanded ? '▼' : '▶'}
+            </Text>
             <Text style={[styles.summaryTitle, { color: colors.text }]}>{title}</Text>
             {status === 'pending' && <Text style={{ color: colors.icon }}> (Summarizing...)</Text>}
             {status === 'error' && <Text style={{ color: 'red' }}> (Error)</Text>}
           </View>
         </TouchableOpacity>
-        <View style={{ flexDirection: 'row' }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity onPress={() => onReload(id)} disabled={status === 'pending'}>
-            <MaterialIcons
-              name="refresh"
-              size={isSmallDevice ? 20 : 24}
-              color={status === 'pending' ? colors.icon : colors.text}
-            />
+            <MaterialIcons name="refresh" size={24} color={status === 'pending' ? colors.icon : colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(id)} style={{ marginLeft: 10 }}>
-            <MaterialIcons name="delete" size={isSmallDevice ? 20 : 24} color={colors.text} />
+          <TouchableOpacity onPress={() => onDelete(id)}>
+            <MaterialIcons name="delete" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
 
       {expanded && (
-        <ScrollView style={{ maxHeight: height * 0.5 }}>
+        <>
           {/* Original Text Section */}
           <View style={[styles.textSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.headerWithCopy}>
               <Text style={[styles.sectionHeader, { color: colors.tint }]}>Original Text</Text>
-              <View style={{ flexDirection: 'row' }}>
-                <TouchableOpacity
-                  style={[styles.copyButton, { backgroundColor: colors.tint, marginRight: 8 }]}
-                  onPress={() => copyToClipboard(original)}
-                >
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => copyToClipboard(original)}>
                   <Text style={styles.copyButtonText}>Copy</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.copyButton, { backgroundColor: colors.tint }]}
-                  onPress={() => downloadTextFile(`${title}-original.txt`, original)}
-                >
+                <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => downloadTextFile(`${title}-original.txt`, original)}>
                   <Text style={styles.copyButtonText}>Download</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            <ScrollView style={{ maxHeight: 180 }}>
-              <Text style={{ color: colors.text, fontSize: isSmallDevice ? 14 : 16 }}>{original}</Text>
+            <ScrollView style={styles.textContent}>
+              <Text style={{ color: colors.text }}>{original}</Text>
             </ScrollView>
           </View>
 
@@ -424,27 +374,21 @@ function SummaryRecord({
             <View style={styles.headerWithCopy}>
               <Text style={[styles.sectionHeader, { color: colors.tint }]}>Summary</Text>
               {status === 'done' && (
-                <View style={{ flexDirection: 'row' }}>
-                  <TouchableOpacity
-                    style={[styles.copyButton, { backgroundColor: colors.tint, marginRight: 8 }]}
-                    onPress={() => copyToClipboard(summary)}
-                  >
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => copyToClipboard(summary)}>
                     <Text style={styles.copyButtonText}>Copy</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.copyButton, { backgroundColor: colors.tint }]}
-                    onPress={() => downloadTextFile(`${title}-summary.txt`, summary)}
-                  >
+                  <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => downloadTextFile(`${title}-summary.txt`, summary)}>
                     <Text style={styles.copyButtonText}>Download</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
             {status === 'pending' && <Text style={{ color: colors.text }}>Processing...</Text>}
-            {status === 'done' && <Text style={{ color: colors.text, fontSize: isSmallDevice ? 14 : 16 }}>{summary}</Text>}
+            {status === 'done' && <Text style={{ color: colors.text }}>{summary}</Text>}
             {status === 'error' && <Text style={{ color: 'red' }}>Failed to summarize.</Text>}
           </View>
-        </ScrollView>
+        </>
       )}
     </View>
   );
@@ -452,59 +396,23 @@ function SummaryRecord({
 
 const styles = StyleSheet.create({
   appContainer: { flex: 1 },
-  scrollContainer: { padding: 16, paddingBottom: 40 },
-  inputSection: { width: '100%', borderRadius: 16, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 5 },
-  summarySection: { width: '100%', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 5 },
-  sectionTitle: { fontWeight: '700', fontSize: 18, marginBottom: 12, borderBottomWidth: 2, paddingBottom: 4 },
-  noSummaryText: { fontStyle: 'italic' },
-  inputTextarea: { padding: 12, borderRadius: 12, borderWidth: 1.5, textAlignVertical: 'top' },
-  uploadButton: { padding: 10, borderRadius: 12, borderWidth: 1 },
-  uploadButtonText: { fontWeight: '600' },
-  submitButton: { padding: 14, borderRadius: 12, alignItems: 'center' },
-  submitButtonText: { fontWeight: '700', color: '#fff' },
-  summaryRecord: {
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  summaryTitleWrapper: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  summaryTitle: {
-    fontWeight: '700',
-    fontSize: 16,
-    flexShrink: 1,
-  },
-  textSection: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-  },
-  headerWithCopy: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    flexWrap: 'wrap',
-  },
-  sectionHeader: {
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  copyButton: {
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-  },
-  copyButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  scrollContainer: { padding: 20 },
+  inputSection: { width: '100%', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 5, padding: 24, marginBottom: 20 },
+  summarySection: { width: '100%', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 5, padding: 24 },
+  sectionTitle: { fontWeight: '700', fontSize: 20, marginBottom: 20, borderBottomWidth: 2, paddingBottom: 6 },
+  noSummaryText: { fontStyle: 'italic', fontSize: 16 },
+  inputTextarea: { minHeight: 150, padding: 20, fontSize: 16, lineHeight: 24, textAlignVertical: 'top', borderRadius: 12, borderWidth: 1.5 },
+  uploadButton: { padding: 10, borderRadius: 12, borderWidth: 1, alignSelf: 'flex-start' },
+  uploadButtonText: { fontSize: 16, fontWeight: '600' },
+  submitButton: { marginTop: 18, padding: 16, borderRadius: 12, alignItems: 'center' },
+  submitButtonText: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  summaryRecord: { borderWidth: 1.5, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, padding: 20, marginBottom: 22 },
+  summaryTitleWrapper: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  summaryTitle: { fontWeight: '700', fontSize: 16 },
+  textSection: { borderWidth: 1.5, marginBottom: 28, padding: 18, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 1 },
+  headerWithCopy: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  sectionHeader: { fontWeight: '700', fontSize: 16 },
+  copyButton: { borderRadius: 8, padding: 5, paddingHorizontal: 14 },
+  copyButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   textContent: { maxHeight: 220 },
 });

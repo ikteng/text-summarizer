@@ -32,3 +32,4 @@ export const Colors = {
     buttonText: '#ffffff',
   },
 };
+
