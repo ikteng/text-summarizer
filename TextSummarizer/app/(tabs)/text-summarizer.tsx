@@ -350,66 +350,130 @@ function SummaryRecord({
   };
 
   return (
-    <View style={[styles.summaryRecord, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.summaryTitleWrapper}>
-        <TouchableOpacity onPress={() => setExpanded(!expanded)}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={{ color: colors.text, marginRight: 20 }}>
-              {expanded ? '▼' : '▶'}
-            </Text>
-            <Text style={[styles.summaryTitle, { color: colors.text }]}>{title}</Text>
-            {status === 'pending' && <Text style={{ color: colors.icon }}> (Summarizing...)</Text>}
-            {status === 'error' && <Text style={{ color: 'red' }}> (Error)</Text>}
-          </View>
-        </TouchableOpacity>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity onPress={() => onReload(id)} disabled={status === 'pending'}>
-            <MaterialIcons name="refresh" size={24} color={status === 'pending' ? colors.icon : colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(id)}>
-            <MaterialIcons name="delete" size={24} color={colors.text} />
-          </TouchableOpacity>
+    <View
+      style={[
+        styles.summaryRecord,
+        { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+    >
+      {/* Header */}
+      <TouchableOpacity
+        onPress={() => setExpanded(!expanded)}
+        style={styles.headerTouchable}
+      >
+        <View style={styles.headerLeft}>
+          <Text style={[styles.arrow, { color: colors.text }]}>
+            {expanded ? '▼' : '▶'}
+          </Text>
+          <Text style={[styles.summaryTitle, { color: colors.text }]}>
+            {title}
+          </Text>
+          {status === 'pending' && (
+            <Text style={{ color: colors.icon }}> (Summarizing...)</Text>
+          )}
+          {status === 'error' && (
+            <Text style={{ color: 'red' }}> (Error)</Text>
+          )}
         </View>
+      </TouchableOpacity>
+
+      {/* Actions */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          onPress={() => onReload(id)}
+          disabled={status === 'pending'}
+          style={styles.iconButton}
+        >
+          <MaterialIcons
+            name="refresh"
+            size={22}
+            color={status === 'pending' ? colors.icon : colors.text}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onDelete(id)} style={styles.iconButton}>
+          <MaterialIcons name="delete" size={22} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
+      {/* Expanded Content */}
       {expanded && (
         <>
-          {/* Original Text Section */}
-          <View style={[styles.textSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Original Text */}
+          <View
+            style={[
+              styles.textSection,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.headerWithCopy}>
-              <Text style={[styles.sectionHeader, { color: colors.tint }]}>Original Text</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => copyToClipboard(original)}>
+              <Text style={[styles.sectionHeader, { color: colors.tint }]}>
+                Original Text
+              </Text>
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[styles.copyButton, { backgroundColor: colors.tint }]}
+                  onPress={() => copyToClipboard(original)}
+                >
                   <Text style={styles.copyButtonText}>Copy</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => downloadTextFile(`${title}-original.txt`, original)}>
+                <TouchableOpacity
+                  style={[styles.copyButton, { backgroundColor: colors.tint }]}
+                  onPress={() =>
+                    downloadTextFile(`${title}-original.txt`, original)
+                  }
+                >
                   <Text style={styles.copyButtonText}>Download</Text>
                 </TouchableOpacity>
               </View>
             </View>
             <ScrollView style={styles.textContent}>
-              <Text style={{ color: colors.text }}>{original}</Text>
+              <Text style={{ color: colors.text, lineHeight: 20 }}>
+                {original}
+              </Text>
             </ScrollView>
           </View>
 
-          {/* Summary Section */}
-          <View style={[styles.textSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Summary */}
+          <View
+            style={[
+              styles.textSection,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.headerWithCopy}>
-              <Text style={[styles.sectionHeader, { color: colors.tint }]}>Summary</Text>
+              <Text style={[styles.sectionHeader, { color: colors.tint }]}>
+                Summary
+              </Text>
               {status === 'done' && (
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => copyToClipboard(summary)}>
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={[styles.copyButton, { backgroundColor: colors.tint }]}
+                    onPress={() => copyToClipboard(summary)}
+                  >
                     <Text style={styles.copyButtonText}>Copy</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.copyButton, { backgroundColor: colors.tint }]} onPress={() => downloadTextFile(`${title}-summary.txt`, summary)}>
+                  <TouchableOpacity
+                    style={[styles.copyButton, { backgroundColor: colors.tint }]}
+                    onPress={() =>
+                      downloadTextFile(`${title}-summary.txt`, summary)
+                    }
+                  >
                     <Text style={styles.copyButtonText}>Download</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
-            {status === 'pending' && <Text style={{ color: colors.text }}>Processing...</Text>}
-            {status === 'done' && <Text style={{ color: colors.text }}>{summary}</Text>}
-            {status === 'error' && <Text style={{ color: 'red' }}>Failed to summarize.</Text>}
+            {status === 'pending' && (
+              <Text style={{ color: colors.text }}>Processing...</Text>
+            )}
+            {status === 'done' && (
+              <Text style={{ color: colors.text, lineHeight: 20 }}>
+                {summary}
+              </Text>
+            )}
+            {status === 'error' && (
+              <Text style={{ color: 'red' }}>Failed to summarize.</Text>
+            )}
           </View>
         </>
       )}
@@ -481,11 +545,11 @@ const styles = StyleSheet.create({
   },
 
   // Summary cards
-  summaryRecord: { 
-    borderWidth: 1, 
-    borderRadius: 10, 
-    padding: 14, 
-    marginBottom: 16 
+  summaryRecord: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
   },
   summaryTitleWrapper: { 
     flexDirection: 'row', 
@@ -493,39 +557,70 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: 8 
   },
-  summaryTitle: { 
-    fontWeight: '600', 
-    fontSize: 15 
+  summaryTitle: {
+    fontWeight: '700',
+    fontSize: 16,
+    flexShrink: 1,
+  },
+
+  headerTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  arrow: {
+    marginRight: 10,
+    fontSize: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+    marginBottom: 10,
+    gap: 12,
+  },
+  iconButton: {
+    padding: 6,
+    borderRadius: 8,
   },
 
   // Text blocks
-  textSection: { 
-    borderWidth: 1, 
-    marginBottom: 16, 
-    padding: 12, 
-    borderRadius: 8 
+    textSection: {
+    borderWidth: 1,
+    marginBottom: 14,
+    padding: 10,
+    borderRadius: 10,
   },
-  headerWithCopy: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 6 
+  headerWithCopy: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  sectionHeader: { 
-    fontWeight: '600', 
-    fontSize: 15 
+  sectionHeader: {
+    fontWeight: '600',
+    fontSize: 15,
   },
-  copyButton: { 
-    borderRadius: 6, 
-    paddingVertical: 4, 
-    paddingHorizontal: 10 
+  buttonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  copyButtonText: { 
-    color: '#fff', 
-    fontSize: 13, 
-    fontWeight: '500' 
+  copyButton: {
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
-  textContent: { 
-    maxHeight: 200 
+  copyButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  textContent: {
+    maxHeight: 180,
   },
 });

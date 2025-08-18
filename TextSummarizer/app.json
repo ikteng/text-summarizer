@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "TextSummarizerApp",
-    "slug": "TextSummarizerApp",
+    "name": "TextSummarizer",
+    "slug": "TextSummarizer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "textsummarizerapp",
+    "scheme": "textsummarizer",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.ikteng.TextSummarizer"
     },
     "web": {
       "bundler": "metro",
@@ -37,6 +38,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f6161076-bcee-4041-9ef3-47c11e7ecc1a"
+      }
+    },
+    "owner": "ikteng"
   }
 }

@@ -1,5 +1,7 @@
 # text-summarizer
 
+Backend: https://huggingface.co/spaces/ikteng/text-summarizer-docker
+
 If you merge CamScanner + AI summarizer, you’d have something unique:
 
 Scan a contract → get a plain-English breakdown.
